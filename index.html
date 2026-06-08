@@ -117,8 +117,9 @@ const G = {
     { id:'a8', name:'百萬富翁', desc:'擁有1000果子幣', goal:1000, progress:100, done:false, reward:100 },
   ],
   
-  // Owned gacha items
+  // Owned gacha items (equippable)
   gachaItems: [],
+  gachaDecorationItems: [],
   
   // Shop items
   shopUnlocked: [],
@@ -325,11 +326,48 @@ function drawPlayer() {
     ctx.fillText(G.equippedHead.icon || '👑', p.x, p.y-5);
   }
   
-  // Body decoration
+  // Body decoration (below face, on body)
   if (G.equippedBody) {
-    ctx.fillStyle = G.equippedBody.color || '#e74c3c';
-    ctx.fillRect(p.x-8, p.y+18, 16, 8);
+    const bodyColor = G.equippedBody.color || '#e74c3c';
+    ctx.fillStyle = bodyColor;
+    ctx.fillRect(p.x-10, p.y+28, 20, 8);
+    ctx.strokeStyle = bodyColor;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(p.x-10, p.y+28, 20, 8);
+    if (G.equippedBody.icon) {
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(G.equippedBody.icon, p.x, p.y+27);
+    }
   }
+  
+  // Legs (animate when moving)
+  const isMoving = Math.abs(p.vx) > 0.2 || Math.abs(p.vy) > 0.2;
+  const legSwing = isMoving ? Math.sin(frameCount * 0.2) * 8 : 0;
+  ctx.strokeStyle = '#D2B48C';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(p.x-6, p.y+34);
+  ctx.lineTo(p.x-10 + legSwing, p.y+44);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(p.x+6, p.y+34);
+  ctx.lineTo(p.x+10 - legSwing, p.y+44);
+  ctx.stroke();
+  
+  // Arms (animate opposite to legs)
+  const armSwing = isMoving ? Math.sin(frameCount * 0.2 + Math.PI) * 6 : 2;
+  ctx.strokeStyle = '#D2B48C';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(p.x-14, p.y+10);
+  ctx.lineTo(p.x-20 + armSwing, p.y+22);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(p.x+14, p.y+10);
+  ctx.lineTo(p.x+20 - armSwing, p.y+22);
+  ctx.stroke();
   
   const blink = Math.sin(frameCount * 0.05) > 0.95;
   const exIdx = G.expression;
@@ -597,8 +635,8 @@ function openGacha() {
   const items = JSON.parse(localStorage.getItem('gachaItems')||'[]');
   let html = '<h2>🎁 盲盒</h2>';
   html += '<div class="row">';
-      html += `<button class="btn btn-orange" onclick="pullGacha('fruit',20)">🍊 普通抽 (20)</button>`;
-      html += `<button class="btn btn-purple" onclick="pullGacha('sparkle',5)">✨ 高級抽 (5)</button>`;
+      html += `<button class="btn btn-orange" onclick="pullGacha('fruit',10)">🍊 普通抽 (10)</button>`;
+      html += `<button class="btn btn-purple" onclick="pullGacha('sparkle',20)">✨ 高級抽 (20)</button>`;
   html += '</div>';
   html += '<div style="margin-top:8px;font-size:13px;color:#aaa">已擁有: '+owned.length+' 件</div>';
   if (items.length > 0) {
@@ -652,6 +690,12 @@ function pullGacha(type, cost) {
   
   const colors = {C:'普通',R:'稀有',E:'史詩',L:'傳說'};
   showToast(`🎉 抽到 [${colors[picked.rarity]}] ${picked.icon} ${picked.name}！`);
+  
+  // Save as equippable decoration
+  const gachaDeco = { id:'gacha_'+Date.now(), name:picked.name, cat: Math.random()<0.5?'head':'body', icon:picked.icon, color:['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6'][Math.floor(Math.random()*5)], fromGacha:true };
+  const gachaDecos = JSON.parse(localStorage.getItem('gachaDecos')||'[]');
+  gachaDecos.push(gachaDeco);
+  localStorage.setItem('gachaDecos', JSON.stringify(gachaDecos));
   
   // Track gacha count
   const gc = parseInt(localStorage.getItem('gachaCount')||'0')+1;
@@ -738,32 +782,63 @@ function openExpressions() {
 // ===== DECORATION =====
 function openDecoration() {
   const unlocked = JSON.parse(localStorage.getItem('shopUnlocked')||'[]');
-  let html = '<h2>💎 裝備裝飾</h2><div class="row">';
+  const gachaDecos = JSON.parse(localStorage.getItem('gachaDecos')||'[]');
   const equippedHead = localStorage.getItem('equippedHead');
   const equippedBody = localStorage.getItem('equippedBody');
+  let html = '<h2>💎 裝備裝飾</h2>';
   
+  let hasItems = false;
+  
+  // Shop items
   SHOP_ITEMS.forEach(item => {
     if (!unlocked.includes(item.id)) return;
+    hasItems = true;
     const isEquipped = (item.cat==='head' && equippedHead===item.id) || (item.cat==='body' && equippedBody===item.id);
-    html += `<div class="item ${isEquipped?'owned':''}" onclick="equipDeco('${item.id}','${item.cat}')">
-      <div style="font-size:24px">${item.icon||'👕'}</div>
-      <div>${item.name}</div>
-      <div style="font-size:11px;color:#aaa">${isEquipped?'✅ 裝備中':'點擊裝備'}</div>
+    html += `<div class="item" style="display:inline-block;margin:4px;${isEquipped?'border:2px solid #2ecc71':''}" onclick="equipDeco('${item.id}','${item.cat}','shop')">
+      <div style="font-size:22px">${item.icon||'👕'}</div>
+      <div style="font-size:11px">${item.name}</div>
+      <div style="font-size:10px;color:#aaa">${isEquipped?'✅':item.cat==='head'?'頭部':'身體'}</div>
     </div>`;
   });
-  html += '</div><p style="font-size:12px;color:#aaa">先到商店購買裝飾，再來這裡裝備</p>';
+  
+  // Gacha items
+  if (gachaDecos.length > 0) {
+    html += '<hr style="border-color:#444;margin:8px 0"><p style="font-size:12px;color:#f39c12">🎁 盲盒物品</p>';
+    gachaDecos.forEach((item, idx) => {
+      hasItems = true;
+      const isEquipped = (item.cat==='head' && equippedHead===('gacha_'+idx)) || (item.cat==='body' && equippedBody===('gacha_'+idx));
+      html += `<div class="item" style="display:inline-block;margin:4px;${isEquipped?'border:2px solid #2ecc71':''}" onclick="equipDeco('gacha_${idx}','${item.cat}','gacha')">
+        <div style="font-size:22px">${item.icon||'🎁'}</div>
+        <div style="font-size:11px">${item.name}</div>
+        <div style="font-size:10px;color:#aaa">${isEquipped?'✅':item.cat==='head'?'頭部':'身體'}</div>
+      </div>`;
+    });
+  }
+  
+  if (!hasItems) html += '<p style="color:#aaa">尚無任何裝飾，去商店購買或抽盲盒吧！</p>';
+  html += '</div>';
   showPanel(html);
 }
 
-function equipDeco(id, cat) {
-  const item = SHOP_ITEMS.find(i=>i.id===id);
+function equipDeco(id, cat, source) {
+  let item;
+  if (source === 'shop') {
+    item = SHOP_ITEMS.find(i=>i.id===id);
+  } else {
+    const gachaDecos = JSON.parse(localStorage.getItem('gachaDecos')||'[]');
+    const idx = parseInt(id.replace('gacha_',''));
+    item = gachaDecos[idx];
+    if (item) item._gachaIdx = idx;
+  }
   if (!item) return;
   if (cat === 'head') {
-    localStorage.setItem('equippedHead', id);
+    localStorage.setItem('equippedHead', source==='shop' ? id : id);
     G.equippedHead = item;
+    localStorage.setItem('equippedHeadName', item.name);
   } else {
-    localStorage.setItem('equippedBody', id);
+    localStorage.setItem('equippedBody', source==='shop' ? id : id);
     G.equippedBody = item;
+    localStorage.setItem('equippedBodyName', item.name);
   }
   showToast(`✅ 已裝備 ${item.name}`);
   openDecoration();
@@ -1134,8 +1209,24 @@ function loadGame() {
   
   const equippedHead = localStorage.getItem('equippedHead');
   const equippedBody = localStorage.getItem('equippedBody');
-  if (equippedHead) G.equippedHead = SHOP_ITEMS.find(i=>i.id===equippedHead);
-  if (equippedBody) G.equippedBody = SHOP_ITEMS.find(i=>i.id===equippedBody);
+  if (equippedHead) {
+    if (equippedHead.startsWith('gacha_')) {
+      const gachaDecos = JSON.parse(localStorage.getItem('gachaDecos')||'[]');
+      const idx = parseInt(equippedHead.replace('gacha_',''));
+      G.equippedHead = gachaDecos[idx];
+    } else {
+      G.equippedHead = SHOP_ITEMS.find(i=>i.id===equippedHead);
+    }
+  }
+  if (equippedBody) {
+    if (equippedBody.startsWith('gacha_')) {
+      const gachaDecos = JSON.parse(localStorage.getItem('gachaDecos')||'[]');
+      const idx = parseInt(equippedBody.replace('gacha_',''));
+      G.equippedBody = gachaDecos[idx];
+    } else {
+      G.equippedBody = SHOP_ITEMS.find(i=>i.id===equippedBody);
+    }
+  }
   
   // Achievement progress
   const done = JSON.parse(localStorage.getItem('achievementsDone')||'[]');
