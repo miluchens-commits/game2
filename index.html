@@ -1262,10 +1262,17 @@ document.addEventListener('keydown', e => {
 function saveGame() {
   localStorage.setItem('fruitCoin', G.fruitCoin);
   localStorage.setItem('sparkleCoin', G.sparkleCoin);
+  localStorage.setItem('gameVersion', '2');
 }
 setInterval(saveGame, 10000);
 
 function loadGame() {
+  // Force clean localStorage if old version
+  if (!localStorage.getItem('gameVersion')) {
+    localStorage.clear();
+    localStorage.setItem('gameVersion', '2');
+  }
+  
   G.fruitCoin = parseInt(localStorage.getItem('fruitCoin')||'100');
   G.sparkleCoin = parseInt(localStorage.getItem('sparkleCoin')||'10');
   G.roomCards = parseInt(localStorage.getItem('roomCards')||'10');
@@ -1274,22 +1281,42 @@ function loadGame() {
   
   const equippedHead = localStorage.getItem('equippedHead');
   const equippedBody = localStorage.getItem('equippedBody');
-  if (equippedHead) {
-    if (equippedHead.startsWith('gacha_')) {
+  
+  // Helper: find item by id from shop or gacha
+  function findItem(id) {
+    if (!id) return null;
+    if (id.startsWith('gacha_')) {
       const gachaDecos = JSON.parse(localStorage.getItem('gachaDecos')||'[]');
-      const idx = parseInt(equippedHead.replace('gacha_',''));
-      G.equippedHead = gachaDecos[idx];
+      return gachaDecos[parseInt(id.replace('gacha_',''))] || null;
+    }
+    return SHOP_ITEMS.find(i=>i.id===id) || null;
+  }
+  
+  // Validate: head items should only go to head slot, body items to body slot
+  const headItem = findItem(equippedHead);
+  const bodyItem = findItem(equippedBody);
+  
+  if (headItem && (!headItem.cat || headItem.cat === 'head')) {
+    G.equippedHead = headItem;
+  } else if (headItem && headItem.cat === 'body') {
+    // Wrong slot: move to body or discard
+    if (!bodyItem) {
+      localStorage.setItem('equippedBody', equippedHead);
+      localStorage.removeItem('equippedHead');
     } else {
-      G.equippedHead = SHOP_ITEMS.find(i=>i.id===equippedHead);
+      localStorage.removeItem('equippedHead');
     }
   }
-  if (equippedBody) {
-    if (equippedBody.startsWith('gacha_')) {
-      const gachaDecos = JSON.parse(localStorage.getItem('gachaDecos')||'[]');
-      const idx = parseInt(equippedBody.replace('gacha_',''));
-      G.equippedBody = gachaDecos[idx];
+  
+  if (bodyItem && bodyItem.cat === 'body') {
+    G.equippedBody = bodyItem;
+  } else if (bodyItem && (!bodyItem.cat || bodyItem.cat === 'head')) {
+    // Wrong slot: move to head or discard
+    if (!headItem) {
+      localStorage.setItem('equippedHead', equippedBody);
+      localStorage.removeItem('equippedBody');
     } else {
-      G.equippedBody = SHOP_ITEMS.find(i=>i.id===equippedBody);
+      localStorage.removeItem('equippedBody');
     }
   }
   
