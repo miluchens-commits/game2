@@ -143,7 +143,7 @@ function drawScene() {
   // Sky gradient
   const grad = ctx.createLinearGradient(0,0,0,H);
   if (G.location === 'space') {
-    grad.addColorStop(0,'#0a0a2e'); grad.addColorStop(1,'#1a1a3e');
+    grad.addColorStop(0,'#000011'); grad.addColorStop(1,'#0a0a2e');
   } else if (G.location === 'okinawa') {
     grad.addColorStop(0,'#87CEEB'); grad.addColorStop(1,'#E0F7FA');
   } else {
@@ -155,12 +155,27 @@ function drawScene() {
   // Ground
   const groundY = 500;
   if (G.location === 'space') {
-    ctx.fillStyle = '#2a2a4a';
+    // Moon surface
+    ctx.fillStyle = '#8a8a8a';
     ctx.fillRect(0,groundY,W,H-groundY);
-    for (let i=0;i<20;i++) {
-      ctx.fillStyle = `rgba(255,255,255,${0.1+Math.random()*0.3})`;
+    // Moon ground texture
+    ctx.fillStyle = '#7a7a7a';
+    for (let i=0;i<30;i++) {
       ctx.beginPath();
-      ctx.arc(Math.random()*W, Math.random()*groundY, 1+Math.random()*2, 0, Math.PI*2);
+      ctx.arc(Math.random()*W, groundY+20+Math.random()*180, 5+Math.random()*15, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#6a6a6a';
+    for (let i=0;i<15;i++) {
+      ctx.beginPath();
+      ctx.arc(Math.random()*W, groundY+30+Math.random()*170, 8+Math.random()*20, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // Moon surface highlights
+    ctx.fillStyle = '#999';
+    for (let i=0;i<10;i++) {
+      ctx.beginPath();
+      ctx.arc(Math.random()*W, groundY+40+Math.random()*160, 3+Math.random()*8, 0, Math.PI*2);
       ctx.fill();
     }
   } else if (G.location === 'okinawa') {
@@ -186,6 +201,26 @@ function drawScene() {
   
   // NPCs / buildings
   drawBuildings();
+  
+  // Stars in space sky
+  if (G.location === 'space') {
+    for (let i=0;i<120;i++) {
+      const sx = (i * 137.5 + 50) % W;
+      const sy = (i * 89.3 + 20) % 480;
+      const size = 0.5 + (i % 3) * 0.5;
+      const twinkle = Math.sin(frameCount * 0.03 + i) * 0.3 + 0.7;
+      ctx.fillStyle = `rgba(255,255,255,${twinkle * (0.4 + (i % 5) * 0.12)})`;
+      ctx.beginPath();
+      ctx.arc(sx, sy, size, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // Nebula effect
+    const ng = ctx.createRadialGradient(300, 150, 20, 300, 150, 200);
+    ng.addColorStop(0, 'rgba(100,0,150,0.05)');
+    ng.addColorStop(1, 'rgba(100,0,150,0)');
+    ctx.fillStyle = ng;
+    ctx.fillRect(0, 0, W, 480);
+  }
   
   // Trees / decor
   drawDecor();
@@ -283,8 +318,9 @@ function drawDecor() {
   if (G.location === 'space') {
     ctx.font='16px Arial'; ctx.fillStyle='#fff'; ctx.textAlign='center';
     ctx.fillText('🚀 太空冒險島', 500, 130);
-    ctx.font='30px Arial'; ctx.fillText('🌍', 800, 300);
-    ctx.fillText('🌙', 200, 200);
+    ctx.font='22px Arial';
+    ctx.fillText('🪐', 750, 200);
+    ctx.fillText('🛸', 120, 350);
     ctx.font='22px Arial'; ctx.fillStyle='rgba(255,255,255,0.5)';
     ctx.fillText('◀ 回果子島', 55, 50);
   }
@@ -692,7 +728,7 @@ function pullGacha(type, cost) {
   showToast(`🎉 抽到 [${colors[picked.rarity]}] ${picked.icon} ${picked.name}！`);
   
   // Save as equippable decoration
-  const gachaDeco = { id:'gacha_'+Date.now(), name:picked.name, cat: Math.random()<0.5?'head':'body', icon:picked.icon, color:['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6'][Math.floor(Math.random()*5)], fromGacha:true };
+  const gachaDeco = { id:'gacha_'+Date.now(), name:picked.name, cat: (['紅領巾','彩虹翅膀','黃金蛋殼','傳說光環'].includes(picked.name)?'body':'head'), icon:picked.icon, color:['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6'][Math.floor(Math.random()*5)], fromGacha:true };
   const gachaDecos = JSON.parse(localStorage.getItem('gachaDecos')||'[]');
   gachaDecos.push(gachaDeco);
   localStorage.setItem('gachaDecos', JSON.stringify(gachaDecos));
