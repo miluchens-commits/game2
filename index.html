@@ -126,6 +126,9 @@ const G = {
   
   // minigame state
   mg: null, // {type, ...}
+  
+  // Moving UFO on space island
+  ufo: { x: 120, y: 350, vx: 0, vy: 0, targetX: 120, targetY: 350, changeTimer: 0 },
 };
 
 const EXPRESSIONS = ['😀','😢','😡','😗','😎'];
@@ -206,16 +209,24 @@ function drawScene() {
     for (let i=0;i<120;i++) {
       const sx = (i * 137.5 + 50) % W;
       const sy = (i * 89.3 + 20) % 480;
-      const size = 0.5 + (i % 3) * 0.5;
-      const twinkle = Math.sin(frameCount * 0.03 + i) * 0.3 + 0.7;
-      ctx.fillStyle = `rgba(255,255,255,${twinkle * (0.4 + (i % 5) * 0.12)})`;
+      const size = 0.8 + (i % 4) * 0.6;
+      const twinkle = Math.sin(frameCount * 0.04 + i * 2.3) * 0.5 + 0.5;
+      const brightness = 0.3 + twinkle * 0.7;
+      ctx.fillStyle = `rgba(255,255,255,${brightness * (0.4 + (i % 5) * 0.12)})`;
       ctx.beginPath();
       ctx.arc(sx, sy, size, 0, Math.PI*2);
       ctx.fill();
+      // Big stars with cross glow
+      if (i % 15 === 0) {
+        ctx.strokeStyle = `rgba(200,200,255,${brightness * 0.3})`;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(sx-6, sy); ctx.lineTo(sx+6, sy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx, sy-6); ctx.lineTo(sx, sy+6); ctx.stroke();
+      }
     }
     // Nebula effect
     const ng = ctx.createRadialGradient(300, 150, 20, 300, 150, 200);
-    ng.addColorStop(0, 'rgba(100,0,150,0.05)');
+    ng.addColorStop(0, 'rgba(100,0,150,0.08)');
     ng.addColorStop(1, 'rgba(100,0,150,0)');
     ctx.fillStyle = ng;
     ctx.fillRect(0, 0, W, 480);
@@ -319,7 +330,10 @@ function drawDecor() {
     ctx.fillText('🚀 太空冒險島', 500, 130);
     ctx.font='22px Arial';
     ctx.fillText('🪐', 750, 200);
-    ctx.fillText('🛸', 120, 350);
+    // Moving UFO
+    const ufoBob = Math.sin(frameCount * 0.05) * 5;
+    ctx.font='26px Arial';
+    ctx.fillText('🛸', G.ufo.x, G.ufo.y + ufoBob);
     ctx.font='22px Arial'; ctx.fillStyle='rgba(255,255,255,0.5)';
     ctx.fillText('◀ 回果子島', 55, 50);
   }
@@ -520,6 +534,22 @@ function update() {
   p.y = Math.max(50, Math.min(H-30, p.y));
   
   // Location labels -> click detection done via canvas click
+  
+  // UFO movement on space island
+  if (G.location === 'space') {
+    G.ufo.changeTimer--;
+    if (G.ufo.changeTimer <= 0) {
+      G.ufo.targetX = 80 + Math.random() * 840;
+      G.ufo.targetY = 150 + Math.random() * 300;
+      G.ufo.changeTimer = 60 + Math.floor(Math.random() * 120);
+    }
+    G.ufo.vx += (G.ufo.targetX - G.ufo.x) * 0.005;
+    G.ufo.vy += (G.ufo.targetY - G.ufo.y) * 0.005;
+    G.ufo.vx *= 0.95;
+    G.ufo.vy *= 0.95;
+    G.ufo.x += G.ufo.vx;
+    G.ufo.y += G.ufo.vy;
+  }
   
   frameCount++;
   if (frameCount % 60 === 0) {
