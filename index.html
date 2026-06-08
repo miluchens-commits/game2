@@ -573,18 +573,18 @@ canvas.addEventListener('click', e => {
   
   // Teleport zones at edges
   if (G.location === 'fruitIsland') {
-    if (mx > 920) { teleportTo('abbyTown'); showToast('→ 前往愛比小鎮'); return; }
-    if (mx < 80) { teleportTo('space'); showToast('→ 前往太空冒險島'); return; }
-    if (my < 60) { teleportTo('okinawa'); showToast('→ 前往沖繩旅遊島'); return; }
+    if (mx > 920) { confirmTeleport('abbyTown', '愛比小鎮'); return; }
+    if (mx < 80) { confirmTeleport('space', '太空冒險島'); return; }
+    if (my < 60) { confirmTeleport('okinawa', '沖繩旅遊島'); return; }
   }
   if (G.location === 'abbyTown') {
-    if (mx < 80 || mx > 920) { teleportTo('fruitIsland'); showToast('→ 返回果子島'); return; }
+    if (mx < 80 || mx > 920) { confirmTeleport('fruitIsland', '果子島'); return; }
   }
   if (G.location === 'space') {
-    if (mx < 80 || mx > 920) { teleportTo('fruitIsland'); showToast('→ 返回果子島'); return; }
+    if (mx < 80 || mx > 920) { confirmTeleport('fruitIsland', '果子島'); return; }
   }
   if (G.location === 'okinawa') {
-    if (mx < 80 || mx > 920) { teleportTo('fruitIsland'); showToast('→ 返回果子島'); return; }
+    if (mx < 80 || mx > 920) { confirmTeleport('fruitIsland', '果子島'); return; }
   }
   
   // Island-specific click areas
@@ -624,6 +624,7 @@ function teleportTo(id) {
   G.player.x = sp.x;
   G.player.y = sp.y;
   document.getElementById('locationText').textContent = G.islands[id].name;
+  closePanel();
   
   let visited = parseInt(localStorage.getItem('visitedIslands')||'1');
   if (!localStorage.getItem('island_'+id)) {
@@ -632,6 +633,12 @@ function teleportTo(id) {
     localStorage.setItem('visitedIslands', visited.toString());
     checkAchievement('a4', visited);
   }
+}
+
+function confirmTeleport(id, name) {
+  showPanel(`<h2>🗺️ 前往 ${name}</h2><p style="margin:16px 0">確定要前往 <b>${name}</b> 嗎？</p>
+    <div class="row"><button class="btn btn-green" onclick="teleportTo('${id}')">✅ 確認</button>
+    <button class="btn btn-red" onclick="closePanel()">❌ 取消</button></div>`);
 }
 
 // ===== CURRENCY =====
