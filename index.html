@@ -533,6 +533,40 @@ function update() {
   p.x = Math.max(20, Math.min(W-20, p.x));
   p.y = Math.max(50, Math.min(H-30, p.y));
   
+  // Proximity triggers (auto-detect when walking near points of interest)
+  const panelShowing = document.getElementById('panel-overlay').style.display !== 'none';
+  if (!G.promptLock && !panelShowing) {
+    const px = p.x, py = p.y;
+    const nearX = (cx, margin=40) => Math.abs(px-cx) < margin;
+    if (G.location === 'fruitIsland') {
+      if (px > 920) { G.promptLock = 'teleport'; confirmTeleport('abbyTown', '愛比小鎮'); }
+      else if (px < 80) { G.promptLock = 'teleport'; confirmTeleport('space', '太空冒險島'); }
+      else if (py < 60) { G.promptLock = 'teleport'; confirmTeleport('okinawa', '沖繩旅遊島'); }
+      else if (py>440 && py<560) {
+        if (nearX(190)) { G.promptLock = 'shop'; openShop(); }
+        else if (nearX(390)) { G.promptLock = 'gacha'; openGacha(); }
+        else if (nearX(790)) { G.promptLock = 'cafe'; showToast('☕ 咖啡館 - 休息中...'); }
+        else if (nearX(590)) { G.promptLock = 'achieve'; openAchievements(); }
+      }
+    } else if (G.location === 'abbyTown' && (px < 80 || px > 920)) {
+      G.promptLock = 'teleport'; confirmTeleport('fruitIsland', '果子島');
+    } else if (G.location === 'space' && (px < 80 || px > 920)) {
+      G.promptLock = 'teleport'; confirmTeleport('fruitIsland', '果子島');
+    } else if (G.location === 'okinawa' && (px < 80 || px > 920)) {
+      G.promptLock = 'teleport'; confirmTeleport('fruitIsland', '果子島');
+    }
+  }
+  // Reset lock when player moves away from trigger zone
+  if (G.promptLock === 'teleport') {
+    const exitEdge = G.location === 'fruitIsland'
+      ? (p.x > 100 && p.x < 900 && p.y > 100)
+      : (p.x > 100 && p.x < 900);
+    if (exitEdge) G.promptLock = null;
+  }
+  if (G.promptLock && G.promptLock !== 'teleport' && G.promptLock !== 'cooldown') {
+    if (p.y < 400 || p.y > 600 || G.location !== 'fruitIsland') G.promptLock = null;
+  }
+  
   // Location labels -> click detection done via canvas click
   
   // UFO movement on space island
@@ -625,6 +659,8 @@ function teleportTo(id) {
   G.player.y = sp.y;
   document.getElementById('locationText').textContent = G.islands[id].name;
   closePanel();
+  G.promptLock = 'cooldown';
+  setTimeout(() => { if (G.promptLock === 'cooldown') G.promptLock = null; }, 800);
   
   let visited = parseInt(localStorage.getItem('visitedIslands')||'1');
   if (!localStorage.getItem('island_'+id)) {
