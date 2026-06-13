@@ -238,6 +238,16 @@ function drawScene() {
   // Player
   drawPlayer();
   
+  // Space floating dust
+  if (G.location === 'space' && G.fxParticles) {
+    G.fxParticles.forEach(pt => {
+      ctx.fillStyle = `rgba(200,220,255,${(pt.life/60)*0.5})`;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2);
+      ctx.fill();
+    });
+  }
+  
   // Mini game overrides
   if (G.mg) drawMiniGame();
 }
@@ -347,10 +357,11 @@ function drawDecor() {
 
 function drawPlayer() {
   const p = G.player;
+  const foff = p.floatOffset || 0;
   // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.2)';
   ctx.beginPath();
-  ctx.ellipse(p.x, p.y+38, 18, 5, 0, 0, Math.PI*2);
+  ctx.ellipse(p.x, p.y+38 + foff*2, 18, 5, 0, 0, Math.PI*2);
   ctx.fill();
   
   // Body (egg)
@@ -362,7 +373,7 @@ function drawPlayer() {
   }
   ctx.fillStyle = grad;
   ctx.beginPath();
-  ctx.ellipse(p.x, p.y+15, 16, 20, 0, 0, Math.PI*2);
+  ctx.ellipse(p.x, p.y+15 + foff, 16, 20, 0, 0, Math.PI*2);
   ctx.fill();
   ctx.strokeStyle = '#D2B48C';
   ctx.lineWidth = 1.5;
@@ -372,21 +383,21 @@ function drawPlayer() {
   if (G.equippedHead) {
     ctx.font = '20px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(G.equippedHead.icon || '👑', p.x, p.y-5);
+    ctx.fillText(G.equippedHead.icon || '👑', p.x, p.y-5 + foff);
   }
   
   // Body decoration (below face, on body)
   if (G.equippedBody) {
     const bodyColor = G.equippedBody.color || '#e74c3c';
     ctx.fillStyle = bodyColor;
-    ctx.fillRect(p.x-10, p.y+28, 20, 8);
+    ctx.fillRect(p.x-10, p.y+28 + foff, 20, 8);
     ctx.strokeStyle = bodyColor;
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(p.x-10, p.y+28, 20, 8);
+    ctx.strokeRect(p.x-10, p.y+28 + foff, 20, 8);
     if (G.equippedBody.icon) {
       ctx.font = '12px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText(G.equippedBody.icon, p.x, p.y+27);
+      ctx.fillText(G.equippedBody.icon, p.x, p.y+27 + foff);
     }
   }
   
@@ -397,12 +408,12 @@ function drawPlayer() {
   ctx.lineWidth = 3;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(p.x-6, p.y+34);
-  ctx.lineTo(p.x-10 + legSwing, p.y+44);
+  ctx.moveTo(p.x-6, p.y+34 + foff);
+  ctx.lineTo(p.x-10 + legSwing, p.y+44 + foff);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(p.x+6, p.y+34);
-  ctx.lineTo(p.x+10 - legSwing, p.y+44);
+  ctx.moveTo(p.x+6, p.y+34 + foff);
+  ctx.lineTo(p.x+10 - legSwing, p.y+44 + foff);
   ctx.stroke();
   
   // Arms (animate opposite to legs)
@@ -410,18 +421,18 @@ function drawPlayer() {
   ctx.strokeStyle = '#D2B48C';
   ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.moveTo(p.x-14, p.y+10);
-  ctx.lineTo(p.x-20 + armSwing, p.y+22);
+  ctx.moveTo(p.x-14, p.y+10 + foff);
+  ctx.lineTo(p.x-20 + armSwing, p.y+22 + foff);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(p.x+14, p.y+10);
-  ctx.lineTo(p.x+20 - armSwing, p.y+22);
+  ctx.moveTo(p.x+14, p.y+10 + foff);
+  ctx.lineTo(p.x+20 - armSwing, p.y+22 + foff);
   ctx.stroke();
   
   const blink = Math.sin(frameCount * 0.05) > 0.95;
   const exIdx = G.expression;
-  const eyeY = p.y + 10;
-  const mouthY = p.y + 22;
+  const eyeY = p.y + 10 + foff;
+  const mouthY = p.y + 22 + foff;
   
   // Eyebrows
   ctx.strokeStyle = '#5a3a1a';
@@ -508,6 +519,7 @@ function update() {
   if (G.mg) { updateMiniGame(); return; }
   
   const p = G.player;
+  const isSpace = G.location === 'space';
   let dx = 0, dy = 0;
   if (G.keys['w']||G.keys['arrowup']) dy = -1;
   if (G.keys['s']||G.keys['arrowdown']) dy = 1;
@@ -516,22 +528,54 @@ function update() {
   
   if (dx!==0 || dy!==0) {
     const len = Math.sqrt(dx*dx+dy*dy);
-    p.vx = (dx/len)*p.speed;
-    p.vy = (dy/len)*p.speed;
+    // Weightlessness: faster acceleration on space
+    const accel = isSpace ? 1.5 : 1;
+    p.vx += ((dx/len)*p.speed - p.vx) * 0.18 * accel;
+    p.vy += ((dy/len)*p.speed - p.vy) * 0.18 * accel;
     p.x += p.vx;
     p.y += p.vy;
     stepCount++;
-    // Check achievement
     checkAchievement('a1', stepCount);
   } else {
-    p.vx *= 0.85;
-    p.vy *= 0.85;
+    // Weightlessness: less friction on space (more sliding)
+    const friction = isSpace ? 0.97 : 0.85;
+    p.vx *= friction;
+    p.vy *= friction;
     p.x += p.vx;
     p.y += p.vy;
   }
   
   p.x = Math.max(20, Math.min(W-20, p.x));
   p.y = Math.max(50, Math.min(H-30, p.y));
+  
+  // Weightlessness: floating bob visual offset
+  if (isSpace) {
+    p.floatBob = (p.floatBob || 0) + (dx !== 0 || dy !== 0 ? 0.12 : 0.04);
+    p.floatOffset = Math.sin(p.floatBob) * 3;
+  } else {
+    p.floatOffset = 0;
+  }
+  
+  // Weightlessness: floating dust on space
+  if (isSpace && frameCount % 4 === 0) {
+    G.fxParticles = G.fxParticles || [];
+    G.fxParticles.push({
+      x: p.x + (Math.random()-0.5)*40,
+      y: p.y + (Math.random()-0.5)*40,
+      vx: (Math.random()-0.5)*0.3,
+      vy: -(0.2+Math.random()*0.4),
+      life: 60,
+      size: 1+Math.random()*2,
+    });
+    G.fxParticles = G.fxParticles.filter(pt => pt.life > 0);
+  }
+  // Update fx particles
+  if (G.fxParticles) {
+    G.fxParticles.forEach(pt => {
+      pt.x += pt.vx; pt.y += pt.vy; pt.life--;
+    });
+    G.fxParticles = G.fxParticles.filter(pt => pt.life > 0);
+  }
   
   // Proximity triggers (auto-detect when walking near points of interest)
   const panelShowing = document.getElementById('panel-overlay').style.display !== 'none';
