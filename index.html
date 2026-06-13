@@ -89,7 +89,7 @@ const G = {
   expression: 0,
   
   // Player
-  player: { x: 500, y: 400, vx: 0, vy: 0, w: 32, h: 38, speed: 3 },
+  player: { x: 500, y: 400, vx: 0, vy: 0, w: 32, h: 38, speed: 4 },
   keys: {},
   
   // Islands
@@ -238,6 +238,31 @@ function drawScene() {
   // Player
   drawPlayer();
   
+  // Jet exhaust particles (flight gadget)
+  if (G.jetParticles) {
+    G.jetParticles.forEach(pt => {
+      const alpha = pt.life / 20;
+      ctx.fillStyle = `rgba(255,${150 + Math.floor(Math.random()*50)},50,${alpha*0.8})`;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, pt.size * alpha, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,200,100,${alpha*0.4})`;
+      ctx.beginPath();
+      ctx.arc(pt.x-2, pt.y-1, pt.size * alpha * 0.6, 0, Math.PI*2);
+      ctx.fill();
+    });
+  }
+  
+  // Jump dust particles
+  if (G.jumpParticles) {
+    G.jumpParticles.forEach(pt => {
+      ctx.fillStyle = `rgba(180,180,180,${(pt.life/15)*0.5})`;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 3, 0, Math.PI*2);
+      ctx.fill();
+    });
+  }
+  
   // Space floating dust
   if (G.location === 'space' && G.fxParticles) {
     G.fxParticles.forEach(pt => {
@@ -284,6 +309,14 @@ function drawBuildings() {
       ctx.textAlign = 'center';
       ctx.fillText(b.label, b.x+b.w/2, b.y+b.h/2+4);
     });
+    // Dock for Okinawa ferry
+    ctx.fillStyle = '#5D4037';
+    ctx.beginPath(); ctx.roundRect(20,510,55,30,4); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('🚢', 47, 522);
+    ctx.fillText('沖繩', 47, 538);
   }
   
   if (G.location === 'okinawa') {
@@ -520,43 +553,65 @@ function update() {
   
   const p = G.player;
   const isSpace = G.location === 'space';
-  let dx = 0, dy = 0;
-  if (G.keys['w']||G.keys['arrowup']) dy = -1;
-  if (G.keys['s']||G.keys['arrowdown']) dy = 1;
+  const hasFly = G.gachaItems && G.gachaItems.some(i => i.name === '飛行器');
+  
+  // Gravity & ground level
+  const groundY = 530;
+  p.vy = (p.vy || 0) + (isSpace ? 0.25 : 0.45);
+  
+  // A/D horizontal movement only
+  let dx = 0;
   if (G.keys['a']||G.keys['arrowleft']) dx = -1;
   if (G.keys['d']||G.keys['arrowright']) dx = 1;
+  p.vx += (dx * p.speed - p.vx) * 0.18;
+  p.x += p.vx;
   
-  if (dx!==0 || dy!==0) {
-    const len = Math.sqrt(dx*dx+dy*dy);
-    // Weightlessness: faster acceleration on space
-    const accel = isSpace ? 1.5 : 1;
-    p.vx += ((dx/len)*p.speed - p.vx) * 0.18 * accel;
-    p.vy += ((dy/len)*p.speed - p.vy) * 0.18 * accel;
-    p.x += p.vx;
-    p.y += p.vy;
-    stepCount++;
-    checkAchievement('a1', stepCount);
-  } else {
-    // Weightlessness: less friction on space (more sliding)
-    const friction = isSpace ? 0.97 : 0.85;
-    p.vx *= friction;
-    p.vy *= friction;
-    p.x += p.vx;
-    p.y += p.vy;
+  // Space = jump (only when on ground)
+  if (G.keys[' '] && p.y >= groundY - 5) {
+    p.vy = isSpace ? -11 : -8;
+    p.y = groundY - 1;
+    G.jumpParticles = G.jumpParticles || [];
+    for (let i=0;i<4;i++) {
+      G.jumpParticles.push({
+        x: p.x + (Math.random()-0.5)*20,
+        y: groundY,
+        vx: (Math.random()-0.5)*2,
+        vy: -(Math.random()*2+1),
+        life: 15,
+      });
+    }
   }
   
+  // Flight gadget: W key = fly upward with jet exhaust
+  if (hasFly && (G.keys['w']||G.keys['arrowup'])) {
+    p.vy = -3.5;
+    G.jetParticles = G.jetParticles || [];
+    if (frameCount % 2 === 0) {
+      G.jetParticles.push({
+        x: p.x + (Math.random()-0.5)*10,
+        y: p.y + 30,
+        vx: (Math.random()-0.5)*1.5,
+        vy: 2 + Math.random()*3,
+        life: 20,
+        size: 3 + Math.random()*4,
+      });
+    }
+  }
+  
+  // Apply vertical velocity
+  p.y += p.vy;
+  
+  // Ground clamp
+  if (p.y > groundY) { p.y = groundY; p.vy = 0; }
+  
+  // Bounds
   p.x = Math.max(20, Math.min(W-20, p.x));
   p.y = Math.max(50, Math.min(H-30, p.y));
   
-  // Weightlessness: floating bob visual offset
-  if (isSpace) {
-    p.floatBob = (p.floatBob || 0) + (dx !== 0 || dy !== 0 ? 0.12 : 0.04);
-    p.floatOffset = Math.sin(p.floatBob) * 3;
-  } else {
-    p.floatOffset = 0;
-  }
+  // Step counter
+  if (Math.abs(p.vx) > 0.5) { stepCount++; checkAchievement('a1', stepCount); }
   
-  // Weightlessness: floating dust on space
+  // Space floating dust
   if (isSpace && frameCount % 4 === 0) {
     G.fxParticles = G.fxParticles || [];
     G.fxParticles.push({
@@ -564,17 +619,23 @@ function update() {
       y: p.y + (Math.random()-0.5)*40,
       vx: (Math.random()-0.5)*0.3,
       vy: -(0.2+Math.random()*0.4),
-      life: 60,
-      size: 1+Math.random()*2,
+      life: 60, size: 1+Math.random()*2,
     });
+    if (G.fxParticles.length > 30) G.fxParticles = G.fxParticles.slice(-30);
+  }
+  if (G.fxParticles) {
+    G.fxParticles.forEach(pt => { pt.x+=pt.vx; pt.y+=pt.vy; pt.life--; });
     G.fxParticles = G.fxParticles.filter(pt => pt.life > 0);
   }
-  // Update fx particles
-  if (G.fxParticles) {
-    G.fxParticles.forEach(pt => {
-      pt.x += pt.vx; pt.y += pt.vy; pt.life--;
-    });
-    G.fxParticles = G.fxParticles.filter(pt => pt.life > 0);
+  // Jet particles
+  if (G.jetParticles) {
+    G.jetParticles.forEach(pt => { pt.x+=pt.vx; pt.y+=pt.vy; pt.life--; });
+    G.jetParticles = G.jetParticles.filter(pt => pt.life > 0);
+  }
+  // Jump particles
+  if (G.jumpParticles) {
+    G.jumpParticles.forEach(pt => { pt.x+=pt.vx; pt.y+=pt.vy; pt.life--; });
+    G.jumpParticles = G.jumpParticles.filter(pt => pt.life > 0);
   }
   
   // Proximity triggers (auto-detect when walking near points of interest)
@@ -584,8 +645,8 @@ function update() {
     const nearX = (cx, margin=40) => Math.abs(px-cx) < margin;
     if (G.location === 'fruitIsland') {
       if (px > 920) { G.promptLock = 'teleport'; confirmTeleport('abbyTown', '愛比小鎮'); }
-      else if (px < 80) { G.promptLock = 'teleport'; confirmTeleport('space', '太空冒險島'); }
-      else if (py < 60) { G.promptLock = 'teleport'; confirmTeleport('okinawa', '沖繩旅遊島'); }
+      else if (px < 80 && py>500) { G.promptLock = 'teleport'; confirmTeleport('space', '太空冒險島'); }
+      else if (nearX(50) && py>500) { G.promptLock = 'teleport'; confirmTeleport('okinawa', '沖繩旅遊島'); }
       else if (py>440 && py<560) {
         if (nearX(190)) { G.promptLock = 'shop'; openShop(); }
         else if (nearX(390)) { G.promptLock = 'gacha'; openGacha(); }
@@ -652,8 +713,8 @@ canvas.addEventListener('click', e => {
   // Teleport zones at edges
   if (G.location === 'fruitIsland') {
     if (mx > 920) { confirmTeleport('abbyTown', '愛比小鎮'); return; }
-    if (mx < 80) { confirmTeleport('space', '太空冒險島'); return; }
-    if (my < 60) { confirmTeleport('okinawa', '沖繩旅遊島'); return; }
+    if (mx < 80 && my > 500) { confirmTeleport('space', '太空冒險島'); return; }
+    if (mx < 80 && my < 500) { confirmTeleport('okinawa', '沖繩旅遊島'); return; }
   }
   if (G.location === 'abbyTown') {
     if (mx < 80 || mx > 920) { confirmTeleport('fruitIsland', '果子島'); return; }
@@ -667,6 +728,7 @@ canvas.addEventListener('click', e => {
   
   // Island-specific click areas
   if (G.location === 'fruitIsland') {
+    if (mx>20 && mx<75 && my>500 && my<560) { confirmTeleport('okinawa', '沖繩旅遊島'); return; }
     if (my<440 || my>560) return;
     if (mx>350 && mx<430) { openGacha(); return; }
     if (mx>750 && mx<830) { openCafe(); return; }
@@ -846,6 +908,7 @@ const GACHA_POOL = [
   { name:'黃金蛋殼', icon:'🥚', rarity:'E', weight:2 },
   { name:'傳說光環', icon:'✨', rarity:'L', weight:1 },
   { name:'獨角獸角', icon:'🦄', rarity:'L', weight:0.5 },
+  { name:'飛行器', icon:'🚀', rarity:'L', weight:0.3 },
 ];
 
 function pullGacha(type, cost) {
@@ -1479,7 +1542,7 @@ function loadGame() {
   // Force clean localStorage if old version
   if (!localStorage.getItem('gameVersion')) {
     localStorage.clear();
-    localStorage.setItem('gameVersion', '2');
+    localStorage.setItem('gameVersion', '3');
   }
   
   G.fruitCoin = parseInt(localStorage.getItem('fruitCoin')||'100');
@@ -1528,6 +1591,9 @@ function loadGame() {
       localStorage.removeItem('equippedBody');
     }
   }
+  
+  // Load gacha items (needed for flight gadget check)
+  G.gachaItems = JSON.parse(localStorage.getItem('gachaItems')||'[]');
   
   // Achievement progress
   const done = JSON.parse(localStorage.getItem('achievementsDone')||'[]');
