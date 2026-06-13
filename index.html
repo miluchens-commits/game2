@@ -545,7 +545,7 @@ function update() {
       else if (py>440 && py<560) {
         if (nearX(190)) { G.promptLock = 'shop'; openShop(); }
         else if (nearX(390)) { G.promptLock = 'gacha'; openGacha(); }
-        else if (nearX(790)) { G.promptLock = 'cafe'; showToast('☕ 咖啡館 - 休息中...'); }
+        else if (nearX(790)) { G.promptLock = 'cafe'; openCafe(); }
         else if (nearX(590)) { G.promptLock = 'achieve'; openAchievements(); }
       }
     } else if (G.location === 'abbyTown' && (px < 80 || px > 920)) {
@@ -625,7 +625,7 @@ canvas.addEventListener('click', e => {
   if (G.location === 'fruitIsland') {
     if (my<440 || my>560) return;
     if (mx>350 && mx<430) { openGacha(); return; }
-    if (mx>750 && mx<830) { showToast('☕ 咖啡館 - 休息中...'); return; }
+    if (mx>750 && mx<830) { openCafe(); return; }
     if (mx>150 && mx<230) { openShop(); return; }
     if (mx>550 && mx<630) { openAchievements(); return; }
   }
@@ -735,6 +735,36 @@ function buyShopItem(id) {
     checkAchievement('a6', unlocked.length);
     openShop();
   }
+}
+
+// ===== CAFE =====
+const CAFE_DRINKS = [
+  { id:'c1', name:'水果冰茶', price:15, emoji:'🧋', desc:'清涼解渴 +5🍊', reward:5 },
+  { id:'c2', name:'草莓奶昔', price:25, emoji:'🥤', desc:'甜蜜美味 +8🍊', reward:8 },
+  { id:'c3', name:'熱帶果汁', price:40, emoji:'🧃', desc:'維他命C爆棚 +15🍊', reward:15 },
+  { id:'c4', name:'咖啡歐蕾', price:60, emoji:'☕', desc:'精神百倍 +25🍊', reward:25 },
+];
+function openCafe() {
+  let html = '<h2>☕ 咖啡館</h2><p style="font-size:13px;color:#aaa">用果子幣購買飲料獲得額外回饋</p>';
+  CAFE_DRINKS.forEach(d => {
+    html += `<div class="item" style="display:inline-flex;flex-direction:column;align-items:center;margin:6px;padding:12px 16px;min-width:100px;cursor:pointer" onclick="buyDrink('${d.id}')">
+      <span style="font-size:32px">${d.emoji}</span>
+      <span style="font-weight:bold;margin:4px 0">${d.name}</span>
+      <span style="color:#f39c12;font-size:13px">🍊${d.price}</span>
+      <span style="font-size:11px;color:#aaa">${d.desc}</span>
+    </div>`;
+  });
+  html += '<br><button class="btn" onclick="closePanel()" style="margin-top:10px">離開</button>';
+  showPanel(html);
+}
+function buyDrink(id) {
+  const d = CAFE_DRINKS.find(x => x.id === id);
+  if (!d) return;
+  if (!spendFruitCoin(d.price)) return;
+  addFruitCoin(d.reward);
+  showToast(`✅ 購買${d.name}成功！獲得+${d.reward}🍊回饋`);
+  closePanel();
+  setTimeout(openCafe, 300);
 }
 
 // ===== GACHA =====
