@@ -82,6 +82,7 @@ const W = 1000, H = 700;
 // ===== GAME STATE =====
 const G = {
   scene: 'game',
+  subScene: null, // { type, ... }
   fruitCoin: 100,
   sparkleCoin: 10,
   roomCards: 10,
@@ -275,6 +276,9 @@ function drawScene() {
   
   // Mini game overrides
   if (G.mg) drawMiniGame();
+  
+  // Sub-scene overrides (building interiors)
+  if (G.subScene) drawSubScene();
 }
 
 function drawPaths() {
@@ -645,8 +649,8 @@ function update() {
     const nearX = (cx, margin=40) => Math.abs(px-cx) < margin;
     if (G.location === 'fruitIsland') {
       if (px > 920) { G.promptLock = 'teleport'; confirmTeleport('abbyTown', '愛比小鎮'); }
-      else if (px < 80 && py>500) { G.promptLock = 'teleport'; confirmTeleport('space', '太空冒險島'); }
       else if (nearX(50) && py>500) { G.promptLock = 'teleport'; confirmTeleport('okinawa', '沖繩旅遊島'); }
+      else if (px < 80 && py>500) { G.promptLock = 'teleport'; confirmTeleport('space', '太空冒險島'); }
       else if (py>440 && py<560) {
         if (nearX(190)) { G.promptLock = 'shop'; openShop(); }
         else if (nearX(390)) { G.promptLock = 'gacha'; openGacha(); }
@@ -659,6 +663,10 @@ function update() {
       G.promptLock = 'teleport'; confirmTeleport('fruitIsland', '果子島');
     } else if (G.location === 'okinawa' && (px < 80 || px > 920)) {
       G.promptLock = 'teleport'; confirmTeleport('fruitIsland', '果子島');
+    } else if (G.location === 'okinawa') {
+      if (nearX(250) && py>440 && py<540) { G.promptLock = 'sub'; enterSubScene('aquarium'); }
+      else if (nearX(650) && py>440 && py<540) { G.promptLock = 'sub'; enterSubScene('castle'); }
+      else if (nearX(440) && py>490 && py<590) { G.promptLock = 'sub'; enterSubScene('garden'); }
     }
   }
   // Reset lock when player moves away from trigger zone
@@ -668,9 +676,10 @@ function update() {
       : (p.x > 100 && p.x < 900);
     if (exitEdge) G.promptLock = null;
   }
-  if (G.promptLock && G.promptLock !== 'teleport' && G.promptLock !== 'cooldown') {
+  if (G.promptLock && G.promptLock !== 'teleport' && G.promptLock !== 'cooldown' && G.promptLock !== 'sub') {
     if (p.y < 400 || p.y > 600 || G.location !== 'fruitIsland') G.promptLock = null;
   }
+  if (G.promptLock === 'sub' && G.location !== 'okinawa') G.promptLock = null;
   
   // Location labels -> click detection done via canvas click
   
@@ -705,6 +714,9 @@ canvas.addEventListener('click', e => {
   const mx = (e.clientX - rect.left) * scaleX;
   const my = (e.clientY - rect.top) * scaleY;
   
+  // Sub-scene click takes priority
+  if (G.subScene) { handleSubSceneClick(mx, my); return; }
+  
   if (G.mg) {
     handleMiniGameClick(mx, my);
     return;
@@ -713,8 +725,8 @@ canvas.addEventListener('click', e => {
   // Teleport zones at edges
   if (G.location === 'fruitIsland') {
     if (mx > 920) { confirmTeleport('abbyTown', '愛比小鎮'); return; }
+    if (mx>20 && mx<75 && my>500 && my<560) { confirmTeleport('okinawa', '沖繩旅遊島'); return; }
     if (mx < 80 && my > 500) { confirmTeleport('space', '太空冒險島'); return; }
-    if (mx < 80 && my < 500) { confirmTeleport('okinawa', '沖繩旅遊島'); return; }
   }
   if (G.location === 'abbyTown') {
     if (mx < 80 || mx > 920) { confirmTeleport('fruitIsland', '果子島'); return; }
@@ -736,9 +748,9 @@ canvas.addEventListener('click', e => {
     if (mx>550 && mx<630) { openAchievements(); return; }
   }
   if (G.location === 'okinawa') {
-    if (mx>200 && mx<300 && my>450 && my<530) { showToast('🐠 水族館：鯨鯊、海龜、熱帶魚、水母'); return; }
-    if (mx>600 && mx<700 && my>450 && my<530) { showToast('🏯 古城導覽 - 獲得紀念徽章！'); addFruitCoin(20); return; }
-    if (mx>400 && mx<480 && my>500 && my<580) { showToast('🌺 花園拍照區'); return; }
+    if (mx>200 && mx<300 && my>450 && my<530) { enterSubScene('aquarium'); return; }
+    if (mx>600 && mx<700 && my>450 && my<530) { enterSubScene('castle'); return; }
+    if (mx>400 && mx<480 && my>500 && my<580) { enterSubScene('garden'); return; }
   }
 });
 
@@ -747,6 +759,10 @@ canvas.addEventListener('contextmenu', e=>e.preventDefault());
 // ===== KEYBOARD =====
 document.addEventListener('keydown', e=>{
   G.keys[e.key.toLowerCase()] = true;
+  if (e.key === 'Escape') {
+    if (G.subScene) { exitSubScene(); return; }
+    if (G.mg) { exitMiniGame(); return; }
+  }
   if (e.key >= '1' && e.key <= '5') {
     G.expression = parseInt(e.key)-1;
     document.getElementById('expressionText').textContent = EXPRESSION_NAMES[G.expression];
@@ -1497,6 +1513,301 @@ function handleMiniGameClick(mx, my) {
   
   if (mg.type === 'clown' && mg.phase === 'playing') {
     showToast('🗳️ 投票完成！');
+  }
+}
+
+// ===== SUB-SCENES (building interiors) =====
+function enterSubScene(type) {
+  closePanel();
+  G.subScene = { type, timer: 0 };
+}
+
+function exitSubScene() {
+  G.subScene = null;
+}
+
+let subFish = [];
+
+function drawSubScene() {
+  if (!G.subScene) return;
+  const ss = G.subScene;
+  ss.timer++;
+  
+  // Exit button
+  ctx.fillStyle = 'rgba(231,76,60,0.85)';
+  ctx.beginPath(); ctx.roundRect(880, 8, 110, 34, 8); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 15px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('✕ 離開', 935, 30);
+  
+  if (ss.type === 'garden') {
+    // Sky
+    const grad = ctx.createLinearGradient(0,0,0,H);
+    grad.addColorStop(0,'#87CEEB'); grad.addColorStop(1,'#E0F7FA');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,W,H);
+    
+    // Ground
+    ctx.fillStyle = '#7CCD7C'; ctx.fillRect(0,400,W,300);
+    ctx.fillStyle = '#6BBF6B'; ctx.fillRect(0,400,W,8);
+    
+    // Flowers (rows of colored circles)
+    const flowerColors = ['#FF6B6B','#FFD700','#FF69B4','#FF4500','#DA70D6','#FFB6C1'];
+    for (let row=0;row<6;row++) {
+      for (let col=0;col<14;col++) {
+        const fx = 40 + col * 70 + Math.sin(ss.timer*0.02+row+col)*3;
+        const fy = 420 + row * 40;
+        ctx.fillStyle = flowerColors[(row+col)%flowerColors.length];
+        ctx.beginPath(); ctx.arc(fx, fy, 8, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#3CB371';
+        ctx.fillRect(fx-1, fy+6, 2, 20);
+      }
+    }
+    
+    // Path
+    ctx.fillStyle = '#D2B48C';
+    ctx.beginPath(); ctx.roundRect(400,380,200,300,10); ctx.fill();
+    ctx.fillStyle = '#C4A882';
+    ctx.beginPath(); ctx.roundRect(400,380,200,6,3); ctx.fill();
+    
+    // Fountain
+    ctx.fillStyle = '#87CEEB';
+    ctx.beginPath(); ctx.ellipse(500,440,40,15,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#5DADE2';
+    ctx.beginPath(); ctx.ellipse(500,438,35,12,0,0,Math.PI*2); ctx.fill();
+    for (let i=0;i<5;i++) {
+      const angle = ss.timer*0.05 + i*1.26;
+      ctx.fillStyle = 'rgba(135,206,250,0.6)';
+      ctx.beginPath();
+      ctx.arc(500+Math.cos(angle)*25, 430+Math.sin(angle)*10-ss.timer%10, 3, 0, Math.PI*2);
+      ctx.fill();
+    }
+    
+    // Butterflies
+    for (let i=0;i<4;i++) {
+      const bx = 150 + Math.sin(ss.timer*0.03+i*2)*300 + i*100;
+      const by = 350 + Math.sin(ss.timer*0.05+i*3)*80;
+      ctx.fillStyle = '#FF69B4';
+      ctx.beginPath(); ctx.ellipse(bx-6, by, 5, 3, -0.3+Math.sin(ss.timer*0.1+i), 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(bx+6, by, 5, 3, 0.3+Math.sin(ss.timer*0.1+i), 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#333';
+      ctx.fillRect(bx-1, by-1, 2, 8);
+    }
+    
+    // Bench
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(750,460,60,10);
+    ctx.fillRect(755,470,10,20);
+    ctx.fillRect(795,470,10,20);
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('🌺 花園 — 點擊花朵收集花瓣！', 500, 60);
+    
+    // Click guide
+    ctx.font = '12px Arial';
+    ctx.fillStyle = '#555';
+    ctx.fillText('點擊花朵獲得果子幣', 500, 680);
+  }
+  
+  if (ss.type === 'aquarium') {
+    // Underwater background
+    const grad = ctx.createLinearGradient(0,0,0,H);
+    grad.addColorStop(0,'#0a3d6b'); grad.addColorStop(0.5,'#0a6b8a'); grad.addColorStop(1,'#0a2a3a');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,W,H);
+    
+    // Light rays from surface
+    for (let i=0;i<5;i++) {
+      ctx.fillStyle = `rgba(200,230,255,${0.03+Math.sin(ss.timer*0.02+i)*0.02})`;
+      ctx.beginPath();
+      ctx.moveTo(i*250,0); ctx.lineTo(i*250+30+Math.sin(ss.timer*0.01+i)*10,0);
+      ctx.lineTo(i*250+80+Math.sin(ss.timer*0.015+i)*20, H); ctx.lineTo(i*250-40, H);
+      ctx.fill();
+    }
+    
+    // Sandy bottom
+    ctx.fillStyle = '#D2B48C'; ctx.fillRect(0,550,W,150);
+    ctx.fillStyle = '#C4A882'; ctx.fillRect(0,550,W,6);
+    
+    // Coral
+    const coralColors = ['#FF6B6B','#FF8C00','#FF69B4','#FF4500'];
+    for (let i=0;i<8;i++) {
+      const cx = 60 + i * 120;
+      ctx.fillStyle = coralColors[i%coralColors.length];
+      ctx.beginPath(); ctx.moveTo(cx,560);
+      ctx.quadraticCurveTo(cx-15+Math.sin(i)*10,530, cx+10+Math.sin(i*2)*8,500);
+      ctx.quadraticCurveTo(cx+25,530, cx,560);
+      ctx.fill();
+    }
+    
+    // Fish
+    if (subFish.length === 0) {
+      for (let i=0;i<10;i++) {
+        subFish.push({
+          x: Math.random()*W, y: 100+Math.random()*350,
+          vx: 0.5+Math.random()*1.5, vy: (Math.random()-0.5)*0.5,
+          color: ['#FF6B6B','#FFD700','#FF69B4','#00CED1','#FF8C00','#98FB98'][i%6],
+          size: 8+Math.random()*12, flip: Math.random()>0.5
+        });
+      }
+    }
+    subFish.forEach(f => {
+      f.x += f.vx * (f.flip?-1:1);
+      f.y += f.vy;
+      if (f.x > W+20) f.x = -20;
+      if (f.x < -20) f.x = W+20;
+      if (f.y < 50 || f.y > 520) f.vy *= -1;
+      
+      ctx.fillStyle = f.color;
+      ctx.beginPath();
+      if (f.flip) {
+        ctx.ellipse(f.x, f.y, f.size, f.size*0.5, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.beginPath(); ctx.moveTo(f.x+f.size+8, f.y); ctx.lineTo(f.x+f.size+20, f.y-8); ctx.lineTo(f.x+f.size+20, f.y+8); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(f.x-3, f.y-2, 3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(f.x-3, f.y-2, 1.5, 0, Math.PI*2); ctx.fill();
+      } else {
+        ctx.ellipse(f.x, f.y, f.size, f.size*0.5, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.beginPath(); ctx.moveTo(f.x-f.size-8, f.y); ctx.lineTo(f.x-f.size-20, f.y-8); ctx.lineTo(f.x-f.size-20, f.y+8); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(f.x+3, f.y-2, 3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(f.x+3, f.y-2, 1.5, 0, Math.PI*2); ctx.fill();
+      }
+    });
+    
+    // Bubbles
+    for (let i=0;i<6;i++) {
+      const bx = 200 + i * 130 + Math.sin(ss.timer*0.02+i)*20;
+      const by = 550 - (ss.timer*0.5 + i*80) % 500;
+      ctx.fillStyle = `rgba(200,230,255,${0.2+Math.sin(ss.timer*0.05+i)*0.1})`;
+      ctx.beginPath(); ctx.arc(bx, by, 4+Math.sin(ss.timer*0.03+i)*2, 0, Math.PI*2); ctx.fill();
+    }
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('🐠 水族館 — 點擊魚兒獲得驚喜！', 500, 60);
+    ctx.font = '12px Arial';
+    ctx.fillStyle = '#8cf';
+    ctx.fillText('點擊魚獲得果子幣', 500, 680);
+  }
+  
+  if (ss.type === 'castle') {
+    // Castle walls
+    const cg = ctx.createLinearGradient(0,0,0,H);
+    cg.addColorStop(0,'#87CEEB'); cg.addColorStop(1,'#FFF8DC');
+    ctx.fillStyle = cg; ctx.fillRect(0,0,W,H);
+    
+    // Ground
+    ctx.fillStyle = '#90EE90'; ctx.fillRect(0,450,W,250);
+    
+    // Castle building
+    ctx.fillStyle = '#D2B48C';
+    ctx.beginPath(); ctx.roundRect(300,150,400,350,10); ctx.fill();
+    ctx.fillStyle = '#C4A882';
+    ctx.beginPath(); ctx.roundRect(300,150,400,8,4); ctx.fill();
+    
+    // Roof
+    ctx.fillStyle = '#8B4513';
+    ctx.beginPath(); ctx.moveTo(280,160); ctx.lineTo(500,60); ctx.lineTo(720,160); ctx.fill();
+    
+    // Towers
+    ctx.fillStyle = '#C4A882';
+    ctx.beginPath(); ctx.roundRect(250,180,60,200,6); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(690,180,60,200,6); ctx.fill();
+    ctx.fillStyle = '#8B4513';
+    ctx.beginPath(); ctx.moveTo(250,190); ctx.lineTo(280,100); ctx.lineTo(310,190); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(690,190); ctx.lineTo(720,100); ctx.lineTo(750,190); ctx.fill();
+    
+    // Windows
+    ctx.fillStyle = '#87CEEB';
+    for (let i=0;i<3;i++) {
+      ctx.beginPath(); ctx.roundRect(360+i*120,240,50,70,25); ctx.fill();
+    }
+    ctx.fillStyle = '#8B4513';
+    ctx.lineWidth = 3;
+    for (let i=0;i<3;i++) {
+      ctx.beginPath(); ctx.moveTo(385+i*120,240); ctx.lineTo(385+i*120,310); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(360+i*120,275); ctx.lineTo(410+i*120,275); ctx.stroke();
+    }
+    
+    // Door
+    ctx.fillStyle = '#5D4037';
+    ctx.beginPath(); ctx.roundRect(460,380,80,120,10); ctx.fill();
+    ctx.fillStyle = '#FFD700';
+    ctx.beginPath(); ctx.arc(510,440,6,0,Math.PI*2); ctx.fill();
+    
+    // Exhibits on sides
+    const exhibits = [
+      { x:130, y:470, label:'🏺 古代陶器', coin:15 },
+      { x:130, y:530, label:'🗡️ 武士刀', coin:20 },
+      { x:870, y:470, label:'📜 古文書', coin:15 },
+      { x:870, y:530, label:'👑 琉球王冠', coin:25 },
+    ];
+    exhibits.forEach(ex => {
+      ctx.fillStyle = '#8B4513';
+      ctx.beginPath(); ctx.roundRect(ex.x-60, ex.y-15, 120, 40, 6); ctx.fill();
+      ctx.fillStyle = '#FFD700';
+      ctx.font = '16px Arial'; ctx.textAlign = 'center';
+      ctx.fillText(ex.label, ex.x, ex.y+5);
+    });
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('🏯 古城 — 點擊展品參觀', 500, 60);
+    ctx.font = '12px Arial';
+    ctx.fillStyle = '#555';
+    ctx.fillText('點擊左/右兩側展品獲得果子幣', 500, 680);
+  }
+}
+
+function handleSubSceneClick(mx, my) {
+  if (!G.subScene) return;
+  const ss = G.subScene;
+  
+  // Exit button
+  if (mx > 880 && my < 50) { exitSubScene(); return; }
+  
+  if (ss.type === 'garden') {
+    // Click on flowers to earn coins
+    if (my > 400 && my < 620) {
+      addFruitCoin(2);
+      showToast('🌸 採到花瓣 +2🍊！');
+    }
+  }
+  
+  if (ss.type === 'aquarium') {
+    // Click on fish
+    let hit = false;
+    subFish.forEach(f => {
+      if (Math.abs(mx-f.x)<f.size+10 && Math.abs(my-f.y)<f.size+5) {
+        hit = true;
+        addFruitCoin(5);
+        showToast(`🐟 魚兒游走了 +5🍊！`);
+        f.x = Math.random()*W; f.y = 100+Math.random()*350;
+      }
+    });
+    if (!hit && my > 100 && my < 550) {
+      showToast('💨 沒抓到魚... 再試試！');
+    }
+  }
+  
+  if (ss.type === 'castle') {
+    // Click exhibits
+    const exhibits = [
+      { x:130, y:470, label:'🏺 古代陶器', coin:15 },
+      { x:130, y:530, label:'🗡️ 武士刀', coin:20 },
+      { x:870, y:470, label:'📜 古文書', coin:15 },
+      { x:870, y:530, label:'👑 琉球王冠', coin:25 },
+    ];
+    exhibits.forEach(ex => {
+      if (Math.abs(mx-ex.x)<60 && Math.abs(my-ex.y)<20) {
+        addFruitCoin(ex.coin);
+        showToast(`${ex.label} +${ex.coin}🍊！`);
+      }
+    });
   }
 }
 
